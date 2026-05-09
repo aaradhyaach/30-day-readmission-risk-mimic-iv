@@ -50,6 +50,7 @@ library(tableone)
 library(gtsummary)
 library(pROC)
 library(survival)
+library(here)
 
 root <- find_rstudio_root_file()
 knitr::opts_knit$set(root.dir = root)
@@ -397,18 +398,34 @@ plot(
 )
 ```
 
+## Model Comparison: Logistic Regression vs. XGBoost
+
+To assess whether a non-linear model could improve discrimination beyond the administrative baseline, an XGBoost classifier was trained on an expanded feature set incorporating laboratory values available at discharge — creatinine, BUN, hemoglobin, WBC, sodium, albumin, and bicarbonate — in addition to the administrative and utilization features from the logistic regression model. Both models were evaluated on a held-out 20% test set (n = 44,168) using area under the ROC curve (AUC).
+
+| Model | Features | AUC |
+|---|---|---|
+| Logistic regression (R, admin only) | Demographics, diagnosis, LOS, insurance | 0.632 |
+| Logistic regression (Python, + utilization + labs) | + Prior admissions, comorbidity count, 8 lab values | 0.644 |
+| XGBoost (Python, + utilization + labs) | Same expanded feature set | 0.679 |
+
+Adding prior utilization and lab features improved logistic regression AUC from 0.632 to 0.644. XGBoost on the same feature set achieved AUC 0.679, capturing non-linear relationships and feature interactions that logistic regression cannot model. The ROC curves for both Python models are shown below.
+
+![ROC curves for logistic regression and XGBoost models](figures/roc_comparison.png)
+
+## Feature Importance: SHAP Analysis
+
+To understand which features drive individual-level readmission predictions in the XGBoost model, SHAP (SHapley Additive exPlanations) values were computed on the test set. The beeswarm plot below shows the 15 most impactful features, where each point represents one patient, horizontal position indicates the direction and magnitude of impact on predicted readmission risk, and color indicates the feature value (red = high, blue = low).
+
+![SHAP beeswarm plot showing feature importance for the XGBoost readmission model](figures/shap_summary.png)
+
+Length of stay was the strongest individual predictor — longer stays (red) substantially increased predicted readmission risk, consistent with its role as a proxy for illness severity. Mental/Behavioral and Neoplasm diagnoses showed strong positive SHAP values, confirming the logistic regression findings. Low albumin and low hemoglobin both increased risk, reflecting nutritional status and anemia as clinically meaningful readmission drivers that administrative-only models miss entirely. Prior admission count, while a strong predictor in the logistic regression, was partially absorbed by the lab features in the XGBoost model but remains an important utilization signal.
+
+**Clinical implication:** Patients presenting with extended stays, psychiatric or oncologic diagnoses, low albumin, or low hemoglobin at discharge represent the highest-priority group for care management intervention — and these signals are available in any EHR at the time of discharge.
+
 ## Limitations
 
 This analysis has several limitations. First, the model relies exclusively on administrative and demographic variables; incorporating clinical features such as laboratory values, vital signs, or validated comorbidity indices (e.g., Charlson Comorbidity Index) would likely improve predictive performance. Second, a large proportion of admissions (71%) were coded under ICD-9 or lacked a mappable primary ICD-10 diagnosis and were grouped into an "Other" category, reducing diagnostic granularity. Third, MIMIC-IV represents a single academic medical center in Boston, which limits the generalizability of findings to other hospital systems or patient populations. Fourth, length of stay is used as a proxy for illness severity rather than a direct clinical severity score.
 
 ## Conclusion
 
-This analysis demonstrates that administrative and utilization-based EHR variables are
-meaningfully associated with 30-day readmission risk. Prior utilization, diagnosis
-category, and comorbidity burden emerged as the strongest predictors, with
-Mental/Behavioral and Neoplasm diagnoses warranting particular attention in discharge
-planning and post-acute follow-up programs. The baseline model achieved an AUC of
-0.637 using only administrative features available at discharge in any EHR — a
-foundation that future work should extend by incorporating clinical variables such as
-laboratory values, vital signs, and validated comorbidity indices to further improve
-discrimination.
+This analysis demonstrates that administrative and utilization-based EHR variables are meaningfully associated with 30-day readmission risk. Prior utilization, diagnosis category, and comorbidity burden emerged as the strongest predictors, with Mental/Behavioral and Neoplasm diagnoses warranting particular attention in discharge planning and post-acute follow-up programs. The baseline model achieved an AUC of 0.637 using only administrative features available at discharge in any EHR — a foundation that future work should extend by incorporating clinical variables such as laboratory values, vital signs, and validated comorbidity indices to further improve discrimination.

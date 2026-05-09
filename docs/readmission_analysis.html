@@ -1209,6 +1209,60 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </section>
+<section id="model-comparison-logistic-regression-vs.-xgboost" class="level2">
+<h2 class="anchored" data-anchor-id="model-comparison-logistic-regression-vs.-xgboost">Model Comparison: Logistic Regression vs.&nbsp;XGBoost</h2>
+<p>To assess whether a non-linear model could improve discrimination beyond the administrative baseline, an XGBoost classifier was trained on an expanded feature set incorporating laboratory values available at discharge — creatinine, BUN, hemoglobin, WBC, sodium, albumin, and bicarbonate — in addition to the administrative and utilization features from the logistic regression model. Both models were evaluated on a held-out 20% test set (n = 44,168) using area under the ROC curve (AUC).</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Features</th>
+<th>AUC</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Logistic regression (R, admin only)</td>
+<td>Demographics, diagnosis, LOS, insurance</td>
+<td>0.632</td>
+</tr>
+<tr class="even">
+<td>Logistic regression (Python, + utilization + labs)</td>
+<td>+ Prior admissions, comorbidity count, 8 lab values</td>
+<td>0.644</td>
+</tr>
+<tr class="odd">
+<td>XGBoost (Python, + utilization + labs)</td>
+<td>Same expanded feature set</td>
+<td>0.679</td>
+</tr>
+</tbody>
+</table>
+<p>Adding prior utilization and lab features improved logistic regression AUC from 0.632 to 0.644. XGBoost on the same feature set achieved AUC 0.679, capturing non-linear relationships and feature interactions that logistic regression cannot model. The ROC curves for both Python models are shown below.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/roc_comparison.png" class="img-fluid figure-img"></p>
+<figcaption>ROC curves for logistic regression and XGBoost models</figcaption>
+</figure>
+</div>
+</section>
+<section id="feature-importance-shap-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="feature-importance-shap-analysis">Feature Importance: SHAP Analysis</h2>
+<p>To understand which features drive individual-level readmission predictions in the XGBoost model, SHAP (SHapley Additive exPlanations) values were computed on the test set. The beeswarm plot below shows the 15 most impactful features, where each point represents one patient, horizontal position indicates the direction and magnitude of impact on predicted readmission risk, and color indicates the feature value (red = high, blue = low).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/shap_summary.png" class="img-fluid figure-img"></p>
+<figcaption>SHAP beeswarm plot showing feature importance for the XGBoost readmission model</figcaption>
+</figure>
+</div>
+<p>Length of stay was the strongest individual predictor — longer stays (red) substantially increased predicted readmission risk, consistent with its role as a proxy for illness severity. Mental/Behavioral and Neoplasm diagnoses showed strong positive SHAP values, confirming the logistic regression findings. Low albumin and low hemoglobin both increased risk, reflecting nutritional status and anemia as clinically meaningful readmission drivers that administrative-only models miss entirely. Prior admission count, while a strong predictor in the logistic regression, was partially absorbed by the lab features in the XGBoost model but remains an important utilization signal.</p>
+<p><strong>Clinical implication:</strong> Patients presenting with extended stays, psychiatric or oncologic diagnoses, low albumin, or low hemoglobin at discharge represent the highest-priority group for care management intervention — and these signals are available in any EHR at the time of discharge.</p>
+</section>
 <section id="limitations" class="level2">
 <h2 class="anchored" data-anchor-id="limitations">Limitations</h2>
 <p>This analysis has several limitations. First, the model relies exclusively on administrative and demographic variables; incorporating clinical features such as laboratory values, vital signs, or validated comorbidity indices (e.g., Charlson Comorbidity Index) would likely improve predictive performance. Second, a large proportion of admissions (71%) were coded under ICD-9 or lacked a mappable primary ICD-10 diagnosis and were grouped into an “Other” category, reducing diagnostic granularity. Third, MIMIC-IV represents a single academic medical center in Boston, which limits the generalizability of findings to other hospital systems or patient populations. Fourth, length of stay is used as a proxy for illness severity rather than a direct clinical severity score.</p>
