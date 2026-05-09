@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Aaradhya Acharya">
-<meta name="dcterms.date" content="2026-05-02">
+<meta name="dcterms.date" content="2026-05-09">
 
 <title>30-Day Hospital Readmission Risk Analysis</title>
 <style>
@@ -103,7 +103,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 2, 2026</p>
+      <p class="date">May 9, 2026</p>
     </div>
   </div>
   
@@ -115,9 +115,25 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
+<section id="executive-summary" class="level2">
+<h2 class="anchored" data-anchor-id="executive-summary">Executive Summary</h2>
+<p>Unplanned 30-day readmissions are among the most costly and measurable failures in post-acute care, costing the U.S. healthcare system an estimated $26 billion annually. Under the CMS Hospital Readmissions Reduction Program, hospitals face Medicare payment penalties of up to 3% for excess readmissions in priority conditions including heart failure, pneumonia, and COPD.</p>
+<p>This analysis applies multivariable logistic regression to 220,798 adult index admissions from the MIMIC-IV database to identify administrative and demographic predictors of 30-day readmission. Key findings:</p>
+<ul>
+<li><strong>15.1% readmission rate</strong> (33,342 of 220,798 admissions) — consistent with national benchmarks</li>
+<li><strong>Mental/Behavioral disorders</strong> (OR 3.26) and <strong>Neoplasms</strong> (OR 2.34) carried the highest adjusted readmission odds among diagnosis categories</li>
+<li><strong>Each additional hospital day</strong> increased readmission odds by 4% (OR 1.04), reflecting illness severity</li>
+<li><strong>Emergency admissions</strong> had the highest readmission risk by admission type (OR 1.49)</li>
+<li>Model <strong>AUC: 0.637</strong> — addition of prior utilization (OR 1.73) and comorbidity features improved discrimination over a demographic-only baseline; clinical variables (labs, vitals) would improve further</li>
+</ul>
+<p><strong>Clinical implication:</strong> At discharge, patients with psychiatric or oncologic diagnoses, extended lengths of stay, and emergency admission status represent the highest-priority group for care management follow-up and post-discharge outreach.</p>
+<hr>
+</section>
 <section id="background" class="level2">
 <h2 class="anchored" data-anchor-id="background">Background</h2>
-<p>Hospital readmissions within 30 days of discharge represent a significant burden on healthcare systems and are widely used as a quality indicator for inpatient care. Understanding which patient characteristics are associated with readmission risk can help clinical teams prioritize post-discharge follow-up and allocate resources more effectively. This analysis uses MIMIC-IV, a large publicly available electronic health record dataset from Beth Israel Deaconess Medical Center, to identify demographic and administrative predictors of 30-day readmission among adult inpatients.</p>
+<p>Hospital readmissions within 30 days of discharge represent a measurable and often preventable failure in the care continuum. They account for an estimated $26 billion in annual U.S. healthcare spending, and under the CMS Hospital Readmissions Reduction Program (HRRP) — active since 2012 — hospitals face Medicare payment reductions of up to 3% for excess readmissions in six priority conditions: heart failure, acute myocardial infarction, pneumonia, COPD, hip and knee replacement, and coronary artery bypass graft surgery.</p>
+<p>Beyond financial penalties, high readmission rates signal gaps in discharge planning, post-acute follow-up, and care transitions. Identifying which patients are at elevated risk at the time of discharge gives clinical teams an actionable window: a care management referral, a scheduled outpatient call at day 3, or a social work consult before the patient leaves the building can meaningfully reduce the probability of return.</p>
+<p>This analysis uses MIMIC-IV, a large de-identified EHR dataset from Beth Israel Deaconess Medical Center (2008–2022), to build and evaluate a 30-day readmission risk model using administrative and demographic variables. The goal is not only to achieve the best possible discrimination, but to identify which patient characteristics are most strongly associated with readmission — information a care operations team can act on today, with data already available in any EHR at discharge.</p>
 </section>
 <section id="data-and-cohort-definition" class="level2">
 <h2 class="anchored" data-anchor-id="data-and-cohort-definition">Data and Cohort Definition</h2>
@@ -174,43 +190,44 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="st">  )</span></span>
 <span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT </span></span>
 <span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a><span class="st">    i.*,</span></span>
-<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a><span class="st">    CASE WHEN r.subject_id IS NOT NULL THEN 1 ELSE 0 END AS readmitted_30d</span></span>
-<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM index_admissions i</span></span>
-<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a><span class="st">  LEFT JOIN readmissions r ON i.subject_id = r.subject_id</span></span>
-<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a><span class="st">"</span>)</span>
-<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>primary_dx <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
-<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT hadm_id, icd_code, icd_version</span></span>
-<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM (</span></span>
-<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT *,</span></span>
-<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a><span class="st">      ROW_NUMBER() OVER (PARTITION BY hadm_id ORDER BY seq_num) AS rn</span></span>
-<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM diagnoses_icd</span></span>
-<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE seq_num = 1</span></span>
-<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a><span class="st">  ) sub</span></span>
-<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE rn = 1</span></span>
-<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a><span class="st">"</span>)</span>
-<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>cohort <span class="ot">&lt;-</span> cohort <span class="sc">|&gt;</span></span>
-<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(primary_dx, <span class="at">by =</span> <span class="st">"hadm_id"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a>    <span class="at">icd3 =</span> <span class="fu">substr</span>(icd_code, <span class="dv">1</span>, <span class="dv">3</span>),</span>
-<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a>    <span class="at">disease_category =</span> <span class="fu">case_when</span>(</span>
-<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"I00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"I99"</span> <span class="sc">~</span> <span class="st">"Circulatory"</span>,</span>
-<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"J00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"J99"</span> <span class="sc">~</span> <span class="st">"Respiratory"</span>,</span>
-<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"K00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"K99"</span> <span class="sc">~</span> <span class="st">"Digestive"</span>,</span>
-<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"N00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"N99"</span> <span class="sc">~</span> <span class="st">"Genitourinary"</span>,</span>
-<span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"C00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"D49"</span> <span class="sc">~</span> <span class="st">"Neoplasms"</span>,</span>
-<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"E00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"E89"</span> <span class="sc">~</span> <span class="st">"Endocrine/Metabolic"</span>,</span>
-<span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"F00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"F99"</span> <span class="sc">~</span> <span class="st">"Mental/Behavioral"</span>,</span>
-<span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"S00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"T98"</span> <span class="sc">~</span> <span class="st">"Injury/Poisoning"</span>,</span>
-<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"Other"</span></span>
-<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a><span class="st">    CASE WHEN r.subject_id IS NOT NULL THEN 1 ELSE 0 END AS readmitted_30d,</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a><span class="st">    r.readmit_time  -- add this line</span></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM index_admissions i</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a><span class="st">  LEFT JOIN readmissions r ON i.subject_id = r.subject_id</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a><span class="st">"</span>)</span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>primary_dx <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT hadm_id, icd_code, icd_version</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM (</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT *,</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a><span class="st">      ROW_NUMBER() OVER (PARTITION BY hadm_id ORDER BY seq_num) AS rn</span></span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM diagnoses_icd</span></span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a><span class="st">    WHERE seq_num = 1</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a><span class="st">  ) sub</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE rn = 1</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a><span class="st">"</span>)</span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>cohort <span class="ot">&lt;-</span> cohort <span class="sc">|&gt;</span></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(primary_dx, <span class="at">by =</span> <span class="st">"hadm_id"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a>    <span class="at">icd3 =</span> <span class="fu">substr</span>(icd_code, <span class="dv">1</span>, <span class="dv">3</span>),</span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>    <span class="at">disease_category =</span> <span class="fu">case_when</span>(</span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"I00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"I99"</span> <span class="sc">~</span> <span class="st">"Circulatory"</span>,</span>
+<span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"J00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"J99"</span> <span class="sc">~</span> <span class="st">"Respiratory"</span>,</span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"K00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"K99"</span> <span class="sc">~</span> <span class="st">"Digestive"</span>,</span>
+<span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"N00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"N99"</span> <span class="sc">~</span> <span class="st">"Genitourinary"</span>,</span>
+<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"C00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"D49"</span> <span class="sc">~</span> <span class="st">"Neoplasms"</span>,</span>
+<span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"E00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"E89"</span> <span class="sc">~</span> <span class="st">"Endocrine/Metabolic"</span>,</span>
+<span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"F00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"F99"</span> <span class="sc">~</span> <span class="st">"Mental/Behavioral"</span>,</span>
+<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>      icd_version <span class="sc">==</span> <span class="dv">10</span> <span class="sc">&amp;</span> icd3 <span class="sc">&gt;=</span> <span class="st">"S00"</span> <span class="sc">&amp;</span> icd3 <span class="sc">&lt;=</span> <span class="st">"T98"</span> <span class="sc">~</span> <span class="st">"Injury/Poisoning"</span>,</span>
+<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"Other"</span></span>
+<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb1-84"><a href="#cb1-84" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="methods" class="level2">
 <h2 class="anchored" data-anchor-id="methods">Methods</h2>
-<p>Predictor variables included patient demographics (age, gender, race/ethnicity), socioeconomic indicators (insurance type, marital status), clinical context (admission type, primary diagnosis category, length of stay). Primary ICD codes were mapped to broad disease categories using ICD-10 chapter ranges. Admissions coded under ICD-9 or without a mappable primary diagnosis were retained and classified as “Other.” Missing values in marital status (n = 10,001) and insurance (n = 6,909) were handled via complete case analysis within the regression model. A multivariable logistic regression model was fit to estimate adjusted odds ratios for 30-day readmission. Model discrimination was assessed using the area under the receiver operating characteristic curve (AUC). A Kaplan-Meier curve was used to visualize time to readmission among the readmitted cohort.</p>
+<p>Predictor variables included patient demographics (age, gender, race/ethnicity), socioeconomic indicators (insurance type, marital status), clinical context (admission type, primary diagnosis category, length of stay), prior utilization (number of admissions in the 6 months preceding the index admission), comorbidity burden (total ICD codes per admission), and a binary flag for high-risk Elixhauser conditions including CHF, COPD, chronic kidney disease, malignancy, and major psychiatric diagnoses. Primary ICD codes were mapped to broad disease categories using ICD-10 chapter ranges. Admissions coded under ICD-9 or without a mappable primary diagnosis were retained and classified as “Other.” Missing values in marital status (n = 10,001) and insurance (n = 6,909) were handled via complete case analysis within the regression model. A multivariable logistic regression model was fit to estimate adjusted odds ratios for 30-day readmission. Model discrimination was assessed using the area under the receiver operating characteristic curve (AUC). A Kaplan-Meier curve was used to visualize time to readmission among the readmitted cohort.</p>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>cohort_clean <span class="ot">&lt;-</span> cohort <span class="sc">|&gt;</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
@@ -240,26 +257,90 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    admission_type, disease_category, los</span>
 <span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Prior utilization: admissions in 6 and 12 months before index admission</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>prior_util <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="st">  WITH index_admits AS (</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT </span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="st">      a.subject_id,</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="st">      a.hadm_id,</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="st">      a.admittime AS index_admittime</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM admissions a</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="st">    JOIN (</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="st">      SELECT subject_id, MIN(admittime) AS first_admit</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="st">      FROM admissions</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="st">      WHERE admission_type NOT IN ('ELECTIVE', 'NEWBORN')</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="st">      GROUP BY subject_id</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="st">    ) first ON a.subject_id = first.subject_id </span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="st">           AND a.admittime = first.first_admit</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="st">  ),</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="st">  prior_counts AS (</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT </span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="st">      i.hadm_id,</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="st">      COUNT(CASE WHEN a.admittime &gt;= i.index_admittime - INTERVAL 6 MONTHS</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="st">                  AND a.admittime &lt; i.index_admittime THEN 1 END) AS prior_admits_6m,</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="st">      COUNT(CASE WHEN a.admittime &gt;= i.index_admittime - INTERVAL 12 MONTHS</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="st">                  AND a.admittime &lt; i.index_admittime THEN 1 END) AS prior_admits_12m</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM index_admits i</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="st">    LEFT JOIN admissions a ON i.subject_id = a.subject_id</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY i.hadm_id</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a><span class="st">  )</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT * FROM prior_counts</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="st">"</span>)</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="co"># Comorbidity burden: total ICD codes per admission (already have diagnoses_icd loaded)</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>comorbidity <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a><span class="st">    hadm_id,</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="st">    COUNT(*) AS n_icd_codes,</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a><span class="st">    -- Binary flags for high-risk Elixhauser conditions</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a><span class="st">    MAX(CASE WHEN icd_version = 10 AND (</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="st">      icd_code LIKE 'I50%'                  -- CHF</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'J44%'              -- COPD</span></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'N18%'              -- Chronic kidney disease</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'C%'               -- Malignancy</span></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'E11%'             -- Type 2 diabetes</span></span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'E10%'             -- Type 1 diabetes</span></span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'F20%'             -- Schizophrenia</span></span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'F31%'             -- Bipolar</span></span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a><span class="st">      OR icd_code LIKE 'F32%' OR icd_code LIKE 'F33%'  -- Depression</span></span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a><span class="st">    ) THEN 1 ELSE 0 END) AS high_risk_comorbidity</span></span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM diagnoses_icd</span></span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="st">  GROUP BY hadm_id</span></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a><span class="st">"</span>)</span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a><span class="co"># Join both onto cohort_clean</span></span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>cohort_clean <span class="ot">&lt;-</span> cohort_clean <span class="sc">|&gt;</span></span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(prior_util, <span class="at">by =</span> <span class="st">"hadm_id"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(comorbidity, <span class="at">by =</span> <span class="st">"hadm_id"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>    <span class="at">prior_admits_6m  =</span> <span class="fu">replace_na</span>(prior_admits_6m, <span class="dv">0</span>),</span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>    <span class="at">prior_admits_12m =</span> <span class="fu">replace_na</span>(prior_admits_12m, <span class="dv">0</span>),</span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_icd_codes      =</span> <span class="fu">replace_na</span>(n_icd_codes, <span class="dv">0</span>),</span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">high_risk_comorbidity =</span> <span class="fu">factor</span>(<span class="fu">replace_na</span>(high_risk_comorbidity, <span class="dv">0</span>)),</span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>    <span class="at">any_prior_admit  =</span> <span class="fu">factor</span>(<span class="fu">ifelse</span>(prior_admits_6m <span class="sc">&gt;</span> <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">0</span>))</span>
+<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 </section>
 <section id="cohort-characteristics" class="level2">
 <h2 class="anchored" data-anchor-id="cohort-characteristics">Cohort Characteristics</h2>
 <p>The final cohort included 220,798 index admissions, of which 33,342 (15.1%) resulted in a readmission within 30 days. Table 1 presents cohort characteristics stratified by readmission status. Readmitted patients were slightly older on average (56.4 vs 55.0 years), more likely to be covered by Medicare (41.3% vs 36.4%), and had substantially longer index stays (mean LOS 6.17 vs 4.11 days). Mental/Behavioral and Neoplasm diagnoses were notably overrepresented among readmitted patients relative to their overall cohort share.</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"gender"</span>, <span class="st">"anchor_age"</span>, <span class="st">"insurance"</span>, <span class="st">"marital_status"</span>,</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>          <span class="st">"race_collapsed"</span>, <span class="st">"admission_type"</span>, <span class="st">"disease_category"</span>, <span class="st">"los"</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>cat_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"gender"</span>, <span class="st">"insurance"</span>, <span class="st">"marital_status"</span>,</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>              <span class="st">"race_collapsed"</span>, <span class="st">"admission_type"</span>, <span class="st">"disease_category"</span>)</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>table1 <span class="ot">&lt;-</span> <span class="fu">CreateTableOne</span>(</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">vars =</span> vars,</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">strata =</span> <span class="st">"readmitted_30d"</span>,</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> cohort_clean,</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">factorVars =</span> cat_vars,</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">addOverall =</span> <span class="cn">TRUE</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(table1, <span class="at">showAllLevels =</span> <span class="cn">FALSE</span>, <span class="at">quote =</span> <span class="cn">FALSE</span>, <span class="at">noSpaces =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"gender"</span>, <span class="st">"anchor_age"</span>, <span class="st">"insurance"</span>, <span class="st">"marital_status"</span>,</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>          <span class="st">"race_collapsed"</span>, <span class="st">"admission_type"</span>, <span class="st">"disease_category"</span>, <span class="st">"los"</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>cat_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"gender"</span>, <span class="st">"insurance"</span>, <span class="st">"marital_status"</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>              <span class="st">"race_collapsed"</span>, <span class="st">"admission_type"</span>, <span class="st">"disease_category"</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>table1 <span class="ot">&lt;-</span> <span class="fu">CreateTableOne</span>(</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">vars =</span> vars,</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">strata =</span> <span class="st">"readmitted_30d"</span>,</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> cohort_clean,</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">factorVars =</span> cat_vars,</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">addOverall =</span> <span class="cn">TRUE</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(table1, <span class="at">showAllLevels =</span> <span class="cn">FALSE</span>, <span class="at">quote =</span> <span class="cn">FALSE</span>, <span class="at">noSpaces =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>                                Stratified by readmitted_30d
                                  Overall       No            Yes          
@@ -352,50 +433,68 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="logistic-regression-results" class="level2">
 <h2 class="anchored" data-anchor-id="logistic-regression-results">Logistic Regression Results</h2>
-<p>A multivariable logistic regression identified several significant predictors of 30-day readmission. Among disease categories, Mental/Behavioral disorders (OR 3.26, p &lt; 0.001) and Neoplasms (OR 2.34, p &lt; 0.001) carried the highest adjusted odds of readmission relative to circulatory conditions. Each additional day of length of stay was associated with a 4% increase in readmission odds (OR 1.04, p &lt; 0.001). Patients with private insurance had lower readmission odds compared to Medicaid (OR 0.84, p &lt; 0.001), while Medicare patients had modestly higher odds (OR 1.05, p &lt; 0.05). Direct Emergency admissions were associated with the highest readmission odds among admission types (OR 1.49, p &lt; 0.001).</p>
+<p>A multivariable logistic regression identified several significant predictors of 30-day readmission. Prior admissions in the 6 months before the index stay carried the highest adjusted odds of readmission (OR 1.73, p &lt; 0.001), consistent with published literature identifying prior utilization as the strongest administrative predictor of return hospitalization. Among diagnosis categories, Mental/Behavioral disorders (OR 3.31, p &lt; 0.001) and Neoplasms (OR 2.35, p &lt; 0.001) carried the highest adjusted odds relative to circulatory conditions. Each additional day of length of stay increased readmission odds by 2% (OR 1.02, p &lt; 0.001), and each additional ICD code on the admission record increased odds by 2% (OR 1.02, p &lt; 0.001), reflecting cumulative comorbidity burden. Direct Emergency admissions had the highest readmission odds among admission types (OR 1.41, p &lt; 0.001). Patients with private insurance had lower readmission odds compared to Medicaid (OR 0.86, p &lt; 0.001).</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>model <span class="ot">&lt;-</span> <span class="fu">glm</span>(</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  readmitted_30d <span class="sc">~</span> gender <span class="sc">+</span> anchor_age <span class="sc">+</span> insurance <span class="sc">+</span> marital_status <span class="sc">+</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    race <span class="sc">+</span> admission_type <span class="sc">+</span> disease_category <span class="sc">+</span> los,</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> cohort_clean,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">"logit"</span>)</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="fu">tbl_regression</span>(</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  model,</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">exponentiate =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">label =</span> <span class="fu">list</span>(</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    gender <span class="sc">~</span> <span class="st">"Gender"</span>,</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    anchor_age <span class="sc">~</span> <span class="st">"Age"</span>,</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    insurance <span class="sc">~</span> <span class="st">"Insurance Type"</span>,</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    marital_status <span class="sc">~</span> <span class="st">"Marital Status"</span>,</span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    race <span class="sc">~</span> <span class="st">"Race/Ethnicity"</span>,</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    admission_type <span class="sc">~</span> <span class="st">"Admission Type"</span>,</span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    disease_category <span class="sc">~</span> <span class="st">"Disease Category"</span>,</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    los <span class="sc">~</span> <span class="st">"Length of Stay (days)"</span></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bold_p</span>(<span class="at">t =</span> <span class="fl">0.05</span>) <span class="sc">|&gt;</span></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bold_labels</span>() <span class="sc">|&gt;</span></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_significance_stars</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>model <span class="ot">&lt;-</span> <span class="fu">glm</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  readmitted_30d <span class="sc">~</span> gender <span class="sc">+</span> anchor_age <span class="sc">+</span> insurance <span class="sc">+</span> marital_status <span class="sc">+</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    race_collapsed <span class="sc">+</span> admission_type <span class="sc">+</span> disease_category <span class="sc">+</span> los <span class="sc">+</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    prior_admits_6m <span class="sc">+</span> n_icd_codes <span class="sc">+</span> high_risk_comorbidity,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> cohort_clean,</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">"logit"</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>pred_probs <span class="ot">&lt;-</span> <span class="fu">predict</span>(model, <span class="at">type =</span> <span class="st">"response"</span>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>roc_obj <span class="ot">&lt;-</span> <span class="fu">roc</span>(</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">response =</span> model<span class="sc">$</span>model<span class="sc">$</span>readmitted_30d,</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">predictor =</span> pred_probs,</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"No"</span>, <span class="st">"Yes"</span>),</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">direction =</span> <span class="st">"&lt;"</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>auc_val <span class="ot">&lt;-</span> <span class="fu">round</span>(<span class="fu">auc</span>(roc_obj), <span class="dv">3</span>)</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="fu">tbl_regression</span>(</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>  model,</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">exponentiate =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">conf.int =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate_fun =</span> purrr<span class="sc">::</span><span class="fu">partial</span>(style_ratio, <span class="at">digits =</span> <span class="dv">2</span>),</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>  <span class="at">include =</span> <span class="fu">c</span>(</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    <span class="st">"gender"</span>, <span class="st">"anchor_age"</span>, <span class="st">"insurance"</span>, <span class="st">"admission_type"</span>,</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    <span class="st">"disease_category"</span>, <span class="st">"los"</span>, <span class="st">"prior_admits_6m"</span>,</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    <span class="st">"n_icd_codes"</span>, <span class="st">"high_risk_comorbidity"</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">label =</span> <span class="fu">list</span>(</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>    gender <span class="sc">~</span> <span class="st">"Gender"</span>,</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>    anchor_age <span class="sc">~</span> <span class="st">"Age"</span>,</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>    insurance <span class="sc">~</span> <span class="st">"Insurance Type"</span>,</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>    admission_type <span class="sc">~</span> <span class="st">"Admission Type"</span>,</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>    disease_category <span class="sc">~</span> <span class="st">"Disease Category"</span>,</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    los <span class="sc">~</span> <span class="st">"Length of Stay (days)"</span>,</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    prior_admits_6m <span class="sc">~</span> <span class="st">"Prior admissions (6 months)"</span>,</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>    n_icd_codes <span class="sc">~</span> <span class="st">"Number of ICD codes"</span>,</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    high_risk_comorbidity <span class="sc">~</span> <span class="st">"High-risk comorbidity"</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bold_p</span>(<span class="at">t =</span> <span class="fl">0.05</span>) <span class="sc">|&gt;</span></span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bold_labels</span>() <span class="sc">|&gt;</span></span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_significance_stars</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output-display">
-<div id="wngvzenwbv" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#wngvzenwbv table {
+<div id="umnsfoygoq" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#umnsfoygoq table {
   font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-#wngvzenwbv thead, #wngvzenwbv tbody, #wngvzenwbv tfoot, #wngvzenwbv tr, #wngvzenwbv td, #wngvzenwbv th {
+#umnsfoygoq thead, #umnsfoygoq tbody, #umnsfoygoq tfoot, #umnsfoygoq tr, #umnsfoygoq td, #umnsfoygoq th {
   border-style: none;
 }
 
-#wngvzenwbv p {
+#umnsfoygoq p {
   margin: 0;
   padding: 0;
 }
 
-#wngvzenwbv .gt_table {
+#umnsfoygoq .gt_table {
   display: table;
   border-collapse: collapse;
   line-height: normal;
@@ -421,12 +520,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-left-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_caption {
+#umnsfoygoq .gt_caption {
   padding-top: 4px;
   padding-bottom: 4px;
 }
 
-#wngvzenwbv .gt_title {
+#umnsfoygoq .gt_title {
   color: #333333;
   font-size: 125%;
   font-weight: initial;
@@ -438,7 +537,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-bottom-width: 0;
 }
 
-#wngvzenwbv .gt_subtitle {
+#umnsfoygoq .gt_subtitle {
   color: #333333;
   font-size: 85%;
   font-weight: initial;
@@ -450,7 +549,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-top-width: 0;
 }
 
-#wngvzenwbv .gt_heading {
+#umnsfoygoq .gt_heading {
   background-color: #FFFFFF;
   text-align: center;
   border-bottom-color: #FFFFFF;
@@ -462,13 +561,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-right-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_bottom_border {
+#umnsfoygoq .gt_bottom_border {
   border-bottom-style: solid;
   border-bottom-width: 2px;
   border-bottom-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_col_headings {
+#umnsfoygoq .gt_col_headings {
   border-top-style: solid;
   border-top-width: 2px;
   border-top-color: #D3D3D3;
@@ -483,7 +582,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-right-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_col_heading {
+#umnsfoygoq .gt_col_heading {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -503,7 +602,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   overflow-x: hidden;
 }
 
-#wngvzenwbv .gt_column_spanner_outer {
+#umnsfoygoq .gt_column_spanner_outer {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -515,15 +614,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   padding-right: 4px;
 }
 
-#wngvzenwbv .gt_column_spanner_outer:first-child {
+#umnsfoygoq .gt_column_spanner_outer:first-child {
   padding-left: 0;
 }
 
-#wngvzenwbv .gt_column_spanner_outer:last-child {
+#umnsfoygoq .gt_column_spanner_outer:last-child {
   padding-right: 0;
 }
 
-#wngvzenwbv .gt_column_spanner {
+#umnsfoygoq .gt_column_spanner {
   border-bottom-style: solid;
   border-bottom-width: 2px;
   border-bottom-color: #D3D3D3;
@@ -535,11 +634,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   width: 100%;
 }
 
-#wngvzenwbv .gt_spanner_row {
+#umnsfoygoq .gt_spanner_row {
   border-bottom-style: hidden;
 }
 
-#wngvzenwbv .gt_group_heading {
+#umnsfoygoq .gt_group_heading {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -565,7 +664,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   text-align: left;
 }
 
-#wngvzenwbv .gt_empty_group_heading {
+#umnsfoygoq .gt_empty_group_heading {
   padding: 0.5px;
   color: #333333;
   background-color: #FFFFFF;
@@ -580,15 +679,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   vertical-align: middle;
 }
 
-#wngvzenwbv .gt_from_md > :first-child {
+#umnsfoygoq .gt_from_md > :first-child {
   margin-top: 0;
 }
 
-#wngvzenwbv .gt_from_md > :last-child {
+#umnsfoygoq .gt_from_md > :last-child {
   margin-bottom: 0;
 }
 
-#wngvzenwbv .gt_row {
+#umnsfoygoq .gt_row {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -607,7 +706,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   overflow-x: hidden;
 }
 
-#wngvzenwbv .gt_stub {
+#umnsfoygoq .gt_stub {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -620,7 +719,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   padding-right: 5px;
 }
 
-#wngvzenwbv .gt_stub_row_group {
+#umnsfoygoq .gt_stub_row_group {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -634,15 +733,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   vertical-align: top;
 }
 
-#wngvzenwbv .gt_row_group_first td {
+#umnsfoygoq .gt_row_group_first td {
   border-top-width: 2px;
 }
 
-#wngvzenwbv .gt_row_group_first th {
+#umnsfoygoq .gt_row_group_first th {
   border-top-width: 2px;
 }
 
-#wngvzenwbv .gt_summary_row {
+#umnsfoygoq .gt_summary_row {
   color: #333333;
   background-color: #FFFFFF;
   text-transform: inherit;
@@ -652,16 +751,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   padding-right: 5px;
 }
 
-#wngvzenwbv .gt_first_summary_row {
+#umnsfoygoq .gt_first_summary_row {
   border-top-style: solid;
   border-top-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_first_summary_row.thick {
+#umnsfoygoq .gt_first_summary_row.thick {
   border-top-width: 2px;
 }
 
-#wngvzenwbv .gt_last_summary_row {
+#umnsfoygoq .gt_last_summary_row {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -671,7 +770,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-bottom-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_grand_summary_row {
+#umnsfoygoq .gt_grand_summary_row {
   color: #333333;
   background-color: #FFFFFF;
   text-transform: inherit;
@@ -681,7 +780,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   padding-right: 5px;
 }
 
-#wngvzenwbv .gt_first_grand_summary_row {
+#umnsfoygoq .gt_first_grand_summary_row {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -691,7 +790,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-top-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_last_grand_summary_row_top {
+#umnsfoygoq .gt_last_grand_summary_row_top {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -701,11 +800,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-bottom-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_striped {
+#umnsfoygoq .gt_striped {
   background-color: rgba(128, 128, 128, 0.05);
 }
 
-#wngvzenwbv .gt_table_body {
+#umnsfoygoq .gt_table_body {
   border-top-style: solid;
   border-top-width: 2px;
   border-top-color: #D3D3D3;
@@ -714,7 +813,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-bottom-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_footnotes {
+#umnsfoygoq .gt_footnotes {
   color: #333333;
   background-color: #FFFFFF;
   border-bottom-style: none;
@@ -728,7 +827,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-right-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_footnote {
+#umnsfoygoq .gt_footnote {
   margin: 0px;
   font-size: 90%;
   padding-top: 4px;
@@ -737,7 +836,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   padding-right: 5px;
 }
 
-#wngvzenwbv .gt_sourcenotes {
+#umnsfoygoq .gt_sourcenotes {
   color: #333333;
   background-color: #FFFFFF;
   border-bottom-style: none;
@@ -751,7 +850,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   border-right-color: #D3D3D3;
 }
 
-#wngvzenwbv .gt_sourcenote {
+#umnsfoygoq .gt_sourcenote {
   font-size: 90%;
   padding-top: 4px;
   padding-bottom: 4px;
@@ -759,72 +858,72 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   padding-right: 5px;
 }
 
-#wngvzenwbv .gt_left {
+#umnsfoygoq .gt_left {
   text-align: left;
 }
 
-#wngvzenwbv .gt_center {
+#umnsfoygoq .gt_center {
   text-align: center;
 }
 
-#wngvzenwbv .gt_right {
+#umnsfoygoq .gt_right {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-#wngvzenwbv .gt_font_normal {
+#umnsfoygoq .gt_font_normal {
   font-weight: normal;
 }
 
-#wngvzenwbv .gt_font_bold {
+#umnsfoygoq .gt_font_bold {
   font-weight: bold;
 }
 
-#wngvzenwbv .gt_font_italic {
+#umnsfoygoq .gt_font_italic {
   font-style: italic;
 }
 
-#wngvzenwbv .gt_super {
+#umnsfoygoq .gt_super {
   font-size: 65%;
 }
 
-#wngvzenwbv .gt_footnote_marks {
+#umnsfoygoq .gt_footnote_marks {
   font-size: 75%;
   vertical-align: 0.4em;
   position: initial;
 }
 
-#wngvzenwbv .gt_asterisk {
+#umnsfoygoq .gt_asterisk {
   font-size: 100%;
   vertical-align: 0;
 }
 
-#wngvzenwbv .gt_indent_1 {
+#umnsfoygoq .gt_indent_1 {
   text-indent: 5px;
 }
 
-#wngvzenwbv .gt_indent_2 {
+#umnsfoygoq .gt_indent_2 {
   text-indent: 10px;
 }
 
-#wngvzenwbv .gt_indent_3 {
+#umnsfoygoq .gt_indent_3 {
   text-indent: 15px;
 }
 
-#wngvzenwbv .gt_indent_4 {
+#umnsfoygoq .gt_indent_4 {
   text-indent: 20px;
 }
 
-#wngvzenwbv .gt_indent_5 {
+#umnsfoygoq .gt_indent_5 {
   text-indent: 25px;
 }
 
-#wngvzenwbv .katex-display {
+#umnsfoygoq .katex-display {
   display: inline-flex !important;
   margin-bottom: 0.75em !important;
 }
 
-#wngvzenwbv div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+#umnsfoygoq div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
   height: 0px !important;
 }
 </style>
@@ -857,13 +956,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;M</td>
-<td class="gt_row gt_center" headers="estimate">1.13***</td>
+<td class="gt_row gt_center" headers="estimate">1.12***</td>
 <td class="gt_row gt_center" headers="std.error">0.013</td>
 </tr>
 <tr class="even">
 <td class="gt_row gt_left" headers="label" style="font-weight: bold">Age</td>
-<td class="gt_row gt_center" headers="estimate">1.00</td>
-<td class="gt_row gt_center" headers="std.error">0.000</td>
+<td class="gt_row gt_center" headers="estimate">1.00**</td>
+<td class="gt_row gt_center" headers="std.error">0.001</td>
 </tr>
 <tr class="odd">
 <td class="gt_row gt_left" headers="label" style="font-weight: bold">Insurance Type</td>
@@ -879,326 +978,154 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Medicare</td>
-<td class="gt_row gt_center" headers="estimate">1.05*</td>
+<td class="gt_row gt_center" headers="estimate">1.04</td>
 <td class="gt_row gt_center" headers="std.error">0.022</td>
 </tr>
 <tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;No charge</td>
-<td class="gt_row gt_center" headers="estimate">1.31</td>
+<td class="gt_row gt_center" headers="estimate">1.37</td>
 <td class="gt_row gt_center" headers="std.error">0.215</td>
 </tr>
 <tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Other</td>
-<td class="gt_row gt_center" headers="estimate">0.89**</td>
-<td class="gt_row gt_center" headers="std.error">0.039</td>
+<td class="gt_row gt_center" headers="estimate">0.92*</td>
+<td class="gt_row gt_center" headers="std.error">0.038</td>
 </tr>
 <tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Private</td>
-<td class="gt_row gt_center" headers="estimate">0.84***</td>
+<td class="gt_row gt_center" headers="estimate">0.86***</td>
 <td class="gt_row gt_center" headers="std.error">0.019</td>
 </tr>
 <tr class="odd">
-<td class="gt_row gt_left" headers="label" style="font-weight: bold">Marital Status</td>
-<td class="gt_row gt_center" headers="estimate"><br>
-</td>
-<td class="gt_row gt_center" headers="std.error"><br>
-</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;DIVORCED</td>
-<td class="gt_row gt_center" headers="estimate">—</td>
-<td class="gt_row gt_center" headers="std.error">—</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;MARRIED</td>
-<td class="gt_row gt_center" headers="estimate">0.90***</td>
-<td class="gt_row gt_center" headers="std.error">0.026</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;SINGLE</td>
-<td class="gt_row gt_center" headers="estimate">0.98</td>
-<td class="gt_row gt_center" headers="std.error">0.026</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;WIDOWED</td>
-<td class="gt_row gt_center" headers="estimate">0.98</td>
-<td class="gt_row gt_center" headers="std.error">0.032</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label" style="font-weight: bold">Race/Ethnicity</td>
-<td class="gt_row gt_center" headers="estimate"><br>
-</td>
-<td class="gt_row gt_center" headers="std.error"><br>
-</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;AMERICAN INDIAN/ALASKA NATIVE</td>
-<td class="gt_row gt_center" headers="estimate">—</td>
-<td class="gt_row gt_center" headers="std.error">—</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;ASIAN</td>
-<td class="gt_row gt_center" headers="estimate">1.00</td>
-<td class="gt_row gt_center" headers="std.error">0.139</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;ASIAN - ASIAN INDIAN</td>
-<td class="gt_row gt_center" headers="estimate">1.02</td>
-<td class="gt_row gt_center" headers="std.error">0.168</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;ASIAN - CHINESE</td>
-<td class="gt_row gt_center" headers="estimate">0.91</td>
-<td class="gt_row gt_center" headers="std.error">0.141</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;ASIAN - KOREAN</td>
-<td class="gt_row gt_center" headers="estimate">1.20</td>
-<td class="gt_row gt_center" headers="std.error">0.204</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;ASIAN - SOUTH EAST ASIAN</td>
-<td class="gt_row gt_center" headers="estimate">1.04</td>
-<td class="gt_row gt_center" headers="std.error">0.165</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;BLACK/AFRICAN</td>
-<td class="gt_row gt_center" headers="estimate">1.02</td>
-<td class="gt_row gt_center" headers="std.error">0.152</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;BLACK/AFRICAN AMERICAN</td>
-<td class="gt_row gt_center" headers="estimate">0.93</td>
-<td class="gt_row gt_center" headers="std.error">0.133</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;BLACK/CAPE VERDEAN</td>
-<td class="gt_row gt_center" headers="estimate">0.80</td>
-<td class="gt_row gt_center" headers="std.error">0.147</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;BLACK/CARIBBEAN ISLAND</td>
-<td class="gt_row gt_center" headers="estimate">0.98</td>
-<td class="gt_row gt_center" headers="std.error">0.152</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC OR LATINO</td>
-<td class="gt_row gt_center" headers="estimate">0.89</td>
-<td class="gt_row gt_center" headers="std.error">0.140</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - CENTRAL AMERICAN</td>
-<td class="gt_row gt_center" headers="estimate">0.71</td>
-<td class="gt_row gt_center" headers="std.error">0.274</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - COLUMBIAN</td>
-<td class="gt_row gt_center" headers="estimate">0.56*</td>
-<td class="gt_row gt_center" headers="std.error">0.235</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - CUBAN</td>
-<td class="gt_row gt_center" headers="estimate">1.11</td>
-<td class="gt_row gt_center" headers="std.error">0.242</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - DOMINICAN</td>
-<td class="gt_row gt_center" headers="estimate">0.95</td>
-<td class="gt_row gt_center" headers="std.error">0.145</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - GUATEMALAN</td>
-<td class="gt_row gt_center" headers="estimate">0.72</td>
-<td class="gt_row gt_center" headers="std.error">0.185</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - HONDURAN</td>
-<td class="gt_row gt_center" headers="estimate">0.65</td>
-<td class="gt_row gt_center" headers="std.error">0.257</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - MEXICAN</td>
-<td class="gt_row gt_center" headers="estimate">0.79</td>
-<td class="gt_row gt_center" headers="std.error">0.206</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - PUERTO RICAN</td>
-<td class="gt_row gt_center" headers="estimate">1.01</td>
-<td class="gt_row gt_center" headers="std.error">0.141</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;HISPANIC/LATINO - SALVADORAN</td>
-<td class="gt_row gt_center" headers="estimate">0.82</td>
-<td class="gt_row gt_center" headers="std.error">0.192</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;MULTIPLE RACE/ETHNICITY</td>
-<td class="gt_row gt_center" headers="estimate">1.22</td>
-<td class="gt_row gt_center" headers="std.error">0.202</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER</td>
-<td class="gt_row gt_center" headers="estimate">0.89</td>
-<td class="gt_row gt_center" headers="std.error">0.247</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;OTHER</td>
-<td class="gt_row gt_center" headers="estimate">0.87</td>
-<td class="gt_row gt_center" headers="std.error">0.135</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;PATIENT DECLINED TO ANSWER</td>
-<td class="gt_row gt_center" headers="estimate">0.58***</td>
-<td class="gt_row gt_center" headers="std.error">0.159</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;PORTUGUESE</td>
-<td class="gt_row gt_center" headers="estimate">1.06</td>
-<td class="gt_row gt_center" headers="std.error">0.171</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;SOUTH AMERICAN</td>
-<td class="gt_row gt_center" headers="estimate">0.88</td>
-<td class="gt_row gt_center" headers="std.error">0.216</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;UNABLE TO OBTAIN</td>
-<td class="gt_row gt_center" headers="estimate">0.51***</td>
-<td class="gt_row gt_center" headers="std.error">0.162</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;UNKNOWN</td>
-<td class="gt_row gt_center" headers="estimate">0.39***</td>
-<td class="gt_row gt_center" headers="std.error">0.143</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;WHITE</td>
-<td class="gt_row gt_center" headers="estimate">1.01</td>
-<td class="gt_row gt_center" headers="std.error">0.132</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;WHITE - BRAZILIAN</td>
-<td class="gt_row gt_center" headers="estimate">1.04</td>
-<td class="gt_row gt_center" headers="std.error">0.173</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;WHITE - EASTERN EUROPEAN</td>
-<td class="gt_row gt_center" headers="estimate">1.19</td>
-<td class="gt_row gt_center" headers="std.error">0.170</td>
-</tr>
-<tr class="even">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;WHITE - OTHER EUROPEAN</td>
-<td class="gt_row gt_center" headers="estimate">1.02</td>
-<td class="gt_row gt_center" headers="std.error">0.137</td>
-</tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;WHITE - RUSSIAN</td>
-<td class="gt_row gt_center" headers="estimate">0.98</td>
-<td class="gt_row gt_center" headers="std.error">0.148</td>
-</tr>
-<tr class="even">
 <td class="gt_row gt_left" headers="label" style="font-weight: bold">Admission Type</td>
 <td class="gt_row gt_center" headers="estimate"><br>
 </td>
 <td class="gt_row gt_center" headers="std.error"><br>
 </td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;AMBULATORY OBSERVATION</td>
 <td class="gt_row gt_center" headers="estimate">—</td>
 <td class="gt_row gt_center" headers="std.error">—</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;DIRECT EMER.</td>
-<td class="gt_row gt_center" headers="estimate">1.49***</td>
+<td class="gt_row gt_center" headers="estimate">1.41***</td>
 <td class="gt_row gt_center" headers="std.error">0.058</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;DIRECT OBSERVATION</td>
-<td class="gt_row gt_center" headers="estimate">0.93</td>
+<td class="gt_row gt_center" headers="estimate">0.92</td>
 <td class="gt_row gt_center" headers="std.error">0.056</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;EU OBSERVATION</td>
-<td class="gt_row gt_center" headers="estimate">0.54***</td>
+<td class="gt_row gt_center" headers="estimate">0.55***</td>
 <td class="gt_row gt_center" headers="std.error">0.050</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;EW EMER.</td>
-<td class="gt_row gt_center" headers="estimate">0.66***</td>
+<td class="gt_row gt_center" headers="estimate">0.63***</td>
 <td class="gt_row gt_center" headers="std.error">0.049</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;OBSERVATION ADMIT</td>
-<td class="gt_row gt_center" headers="estimate">0.64***</td>
+<td class="gt_row gt_center" headers="estimate">0.60***</td>
 <td class="gt_row gt_center" headers="std.error">0.052</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;SURGICAL SAME DAY ADMISSION</td>
 <td class="gt_row gt_center" headers="estimate">0.66***</td>
 <td class="gt_row gt_center" headers="std.error">0.051</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;URGENT</td>
-<td class="gt_row gt_center" headers="estimate">0.72***</td>
+<td class="gt_row gt_center" headers="estimate">0.67***</td>
 <td class="gt_row gt_center" headers="std.error">0.051</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label" style="font-weight: bold">Disease Category</td>
 <td class="gt_row gt_center" headers="estimate"><br>
 </td>
 <td class="gt_row gt_center" headers="std.error"><br>
 </td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Circulatory</td>
 <td class="gt_row gt_center" headers="estimate">—</td>
 <td class="gt_row gt_center" headers="std.error">—</td>
 </tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Digestive</td>
-<td class="gt_row gt_center" headers="estimate">1.31***</td>
-<td class="gt_row gt_center" headers="std.error">0.036</td>
-</tr>
 <tr class="even">
+<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Digestive</td>
+<td class="gt_row gt_center" headers="estimate">1.38***</td>
+<td class="gt_row gt_center" headers="std.error">0.037</td>
+</tr>
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Endocrine/Metabolic</td>
-<td class="gt_row gt_center" headers="estimate">0.97</td>
+<td class="gt_row gt_center" headers="estimate">0.93</td>
 <td class="gt_row gt_center" headers="std.error">0.067</td>
 </tr>
-<tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Genitourinary</td>
-<td class="gt_row gt_center" headers="estimate">1.13*</td>
-<td class="gt_row gt_center" headers="std.error">0.058</td>
-</tr>
 <tr class="even">
+<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Genitourinary</td>
+<td class="gt_row gt_center" headers="estimate">1.15*</td>
+<td class="gt_row gt_center" headers="std.error">0.059</td>
+</tr>
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Injury/Poisoning</td>
-<td class="gt_row gt_center" headers="estimate">0.82***</td>
+<td class="gt_row gt_center" headers="estimate">0.83***</td>
 <td class="gt_row gt_center" headers="std.error">0.039</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Mental/Behavioral</td>
-<td class="gt_row gt_center" headers="estimate">3.26***</td>
+<td class="gt_row gt_center" headers="estimate">3.31***</td>
 <td class="gt_row gt_center" headers="std.error">0.042</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Neoplasms</td>
-<td class="gt_row gt_center" headers="estimate">2.34***</td>
-<td class="gt_row gt_center" headers="std.error">0.036</td>
+<td class="gt_row gt_center" headers="estimate">2.35***</td>
+<td class="gt_row gt_center" headers="std.error">0.037</td>
+</tr>
+<tr class="even">
+<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Other</td>
+<td class="gt_row gt_center" headers="estimate">1.36***</td>
+<td class="gt_row gt_center" headers="std.error">0.028</td>
 </tr>
 <tr class="odd">
-<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Other</td>
-<td class="gt_row gt_center" headers="estimate">1.23***</td>
-<td class="gt_row gt_center" headers="std.error">0.026</td>
-</tr>
-<tr class="even">
 <td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;Respiratory</td>
-<td class="gt_row gt_center" headers="estimate">0.98</td>
+<td class="gt_row gt_center" headers="estimate">0.97</td>
 <td class="gt_row gt_center" headers="std.error">0.062</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td class="gt_row gt_left" headers="label" style="font-weight: bold">Length of Stay (days)</td>
-<td class="gt_row gt_center" headers="estimate">1.04***</td>
+<td class="gt_row gt_center" headers="estimate">1.02***</td>
 <td class="gt_row gt_center" headers="std.error">0.001</td>
+</tr>
+<tr class="odd">
+<td class="gt_row gt_left" headers="label" style="font-weight: bold">Prior admissions (6 months)</td>
+<td class="gt_row gt_center" headers="estimate">1.73***</td>
+<td class="gt_row gt_center" headers="std.error">0.056</td>
+</tr>
+<tr class="even">
+<td class="gt_row gt_left" headers="label" style="font-weight: bold">Number of ICD codes</td>
+<td class="gt_row gt_center" headers="estimate">1.02***</td>
+<td class="gt_row gt_center" headers="std.error">0.001</td>
+</tr>
+<tr class="odd">
+<td class="gt_row gt_left" headers="label" style="font-weight: bold">High-risk comorbidity</td>
+<td class="gt_row gt_center" headers="estimate"><br>
+</td>
+<td class="gt_row gt_center" headers="std.error"><br>
+</td>
+</tr>
+<tr class="even">
+<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;0</td>
+<td class="gt_row gt_center" headers="estimate">—</td>
+<td class="gt_row gt_center" headers="std.error">—</td>
+</tr>
+<tr class="odd">
+<td class="gt_row gt_left" headers="label">&nbsp;&nbsp;&nbsp;&nbsp;1</td>
+<td class="gt_row gt_center" headers="estimate">1.09***</td>
+<td class="gt_row gt_center" headers="std.error">0.020</td>
 </tr>
 </tbody><tfoot>
 <tr class="gt_footnotes odd">
@@ -1217,28 +1144,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="model-performance" class="level2">
 <h2 class="anchored" data-anchor-id="model-performance">Model Performance</h2>
-<p>The logistic regression model achieved an AUC of 0.632, indicating modest discriminative ability. This is consistent with models built exclusively on administrative and demographic variables, which lack the clinical granularity of laboratory results, vital signs, or comorbidity indices. The ROC curve is presented below.</p>
+<p>The logistic regression model achieved an AUC of 0.637, indicating modest discriminative ability. Adding prior utilization, comorbidity burden, and high-risk condition flags improved discrimination relative to a demographic-only baseline. The model remains limited by the absence of clinical variables such as laboratory values and vital signs, which are expected to improve performance further. The ROC curve is presented below.</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>pred_probs <span class="ot">&lt;-</span> <span class="fu">predict</span>(model, <span class="at">type =</span> <span class="st">"response"</span>)</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>roc_obj <span class="ot">&lt;-</span> <span class="fu">roc</span>(</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">response =</span> model<span class="sc">$</span>model<span class="sc">$</span>readmitted_30d,</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">predictor =</span> pred_probs,</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"No"</span>, <span class="st">"Yes"</span>),</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">direction =</span> <span class="st">"&lt;"</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>auc_val <span class="ot">&lt;-</span> <span class="fu">round</span>(<span class="fu">auc</span>(roc_obj), <span class="dv">3</span>)</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  roc_obj,</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">col =</span> <span class="st">"#2C7BB6"</span>,</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">lwd =</span> <span class="dv">2</span>,</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">main =</span> <span class="fu">paste0</span>(<span class="st">"ROC Curve — 30-Day Readmission Model (AUC = "</span>, auc_val, <span class="st">")"</span>),</span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>  <span class="at">xlab =</span> <span class="st">"False Positive Rate (1 - Specificity)"</span>,</span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">ylab =</span> <span class="st">"True Positive Rate (Sensitivity)"</span></span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">a =</span> <span class="dv">0</span>, <span class="at">b =</span> <span class="dv">1</span>, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"gray"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  roc_obj,</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">col =</span> <span class="st">"#2C7BB6"</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">lwd =</span> <span class="dv">2</span>,</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">main =</span> <span class="fu">paste0</span>(<span class="st">"ROC Curve — 30-Day Readmission Model (AUC = "</span>, auc_val, <span class="st">")"</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">xlab =</span> <span class="st">"False Positive Rate (1 - Specificity)"</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">ylab =</span> <span class="st">"True Positive Rate (Sensitivity)"</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">a =</span> <span class="dv">0</span>, <span class="at">b =</span> <span class="dv">1</span>, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"gray"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -1252,27 +1168,38 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="time-to-readmission">Time to Readmission</h2>
 <p>Among patients who were readmitted within 30 days, the Kaplan-Meier curve below illustrates the probability of remaining readmission-free over time following the index discharge. The curve shows a steady decline in the survival probability across the 30-day window, with no pronounced clustering at a single time point.</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>surv_data <span class="ot">&lt;-</span> cohort_clean <span class="sc">|&gt;</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">readmitted_num =</span> <span class="fu">ifelse</span>(readmitted_30d <span class="sc">==</span> <span class="st">"Yes"</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">time =</span> <span class="fu">ifelse</span>(readmitted_num <span class="sc">==</span> <span class="dv">1</span>, los, <span class="dv">30</span>)</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(los))</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>km_fit <span class="ot">&lt;-</span> <span class="fu">survfit</span>(</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Surv</span>(time, readmitted_num) <span class="sc">~</span> <span class="dv">1</span>,</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> surv_data</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(</span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>  km_fit,</span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">xlab =</span> <span class="st">"Days Since Discharge"</span>,</span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">ylab =</span> <span class="st">"Probability of No Readmission"</span>,</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>  <span class="at">main =</span> <span class="st">"Kaplan-Meier Curve — Time to 30-Day Readmission"</span>,</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">col =</span> <span class="st">"#2C7BB6"</span>,</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>  <span class="at">lwd =</span> <span class="dv">2</span>,</span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">conf.int =</span> <span class="cn">TRUE</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>surv_data <span class="ot">&lt;-</span> cohort_clean <span class="sc">|&gt;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    cohort <span class="sc">|&gt;</span> <span class="fu">select</span>(hadm_id, readmit_time, dischtime),</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">by =</span> <span class="st">"hadm_id"</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">readmitted_num =</span> <span class="fu">ifelse</span>(readmitted_30d <span class="sc">==</span> <span class="st">"Yes"</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">days_to_event =</span> <span class="fu">case_when</span>(</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>      readmitted_num <span class="sc">==</span> <span class="dv">1</span> <span class="sc">~</span> <span class="fu">as.numeric</span>(</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="fu">difftime</span>(readmit_time, dischtime, <span class="at">units =</span> <span class="st">"days"</span>)</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="dv">30</span>  <span class="co"># censored at 30 days for non-readmitted patients</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">days_to_event =</span> <span class="fu">pmin</span>(<span class="fu">pmax</span>(days_to_event, <span class="dv">0</span>), <span class="dv">30</span>)  <span class="co"># clamp to [0, 30]</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(days_to_event))</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>km_fit <span class="ot">&lt;-</span> <span class="fu">survfit</span>(</span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Surv</span>(days_to_event, readmitted_num) <span class="sc">~</span> <span class="dv">1</span>,</span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> surv_data</span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>  km_fit,</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>  <span class="at">xlab =</span> <span class="st">"Days Since Discharge"</span>,</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>  <span class="at">ylab =</span> <span class="st">"Probability of No Readmission"</span>,</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">main =</span> <span class="st">"Kaplan-Meier Curve — Time to 30-Day Readmission"</span>,</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">col =</span> <span class="st">"#2C7BB6"</span>,</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>  <span class="at">lwd =</span> <span class="dv">2</span>,</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">conf.int =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>  <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">30</span>)</span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -1288,7 +1215,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="conclusion" class="level2">
 <h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
-<p>This analysis demonstrates that demographic and administrative EHR variables are associated with 30-day readmission risk, with diagnosis category and length of stay emerging as the strongest predictors. Mental/Behavioral and Neoplasm diagnoses warrant particular attention in discharge planning and post-acute follow-up programs. Future work should incorporate clinical variables to improve model discrimination beyond the baseline AUC of 0.632 achieved here.</p>
+<p>This analysis demonstrates that administrative and utilization-based EHR variables are meaningfully associated with 30-day readmission risk. Prior utilization, diagnosis category, and comorbidity burden emerged as the strongest predictors, with Mental/Behavioral and Neoplasm diagnoses warranting particular attention in discharge planning and post-acute follow-up programs. The baseline model achieved an AUC of 0.637 using only administrative features available at discharge in any EHR — a foundation that future work should extend by incorporating clinical variables such as laboratory values, vital signs, and validated comorbidity indices to further improve discrimination.</p>
 </section>
 
 </main>
