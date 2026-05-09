@@ -124,7 +124,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><strong>Mental/Behavioral disorders</strong> (OR 3.26) and <strong>Neoplasms</strong> (OR 2.34) carried the highest adjusted readmission odds among diagnosis categories</li>
 <li><strong>Each additional hospital day</strong> increased readmission odds by 4% (OR 1.04), reflecting illness severity</li>
 <li><strong>Emergency admissions</strong> had the highest readmission risk by admission type (OR 1.49)</li>
-<li>Model <strong>AUC: 0.637</strong> — addition of prior utilization (OR 1.73) and comorbidity features improved discrimination over a demographic-only baseline; clinical variables (labs, vitals) would improve further</li>
+<li>Model <strong>AUC: 0.679</strong> (XGBoost with lab features) — up from 0.632 administrative baseline; prior utilization (OR 1.73), low albumin, and psychiatric diagnosis emerged as strongest discharge risk signals</li>
 </ul>
 <p><strong>Clinical implication:</strong> At discharge, patients with psychiatric or oncologic diagnoses, extended lengths of stay, and emergency admission status represent the highest-priority group for care management follow-up and post-discharge outreach.</p>
 <hr>
@@ -1262,6 +1262,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <p>Length of stay was the strongest individual predictor — longer stays (red) substantially increased predicted readmission risk, consistent with its role as a proxy for illness severity. Mental/Behavioral and Neoplasm diagnoses showed strong positive SHAP values, confirming the logistic regression findings. Low albumin and low hemoglobin both increased risk, reflecting nutritional status and anemia as clinically meaningful readmission drivers that administrative-only models miss entirely. Prior admission count, while a strong predictor in the logistic regression, was partially absorbed by the lab features in the XGBoost model but remains an important utilization signal.</p>
 <p><strong>Clinical implication:</strong> Patients presenting with extended stays, psychiatric or oncologic diagnoses, low albumin, or low hemoglobin at discharge represent the highest-priority group for care management intervention — and these signals are available in any EHR at the time of discharge.</p>
+</section>
+<section id="operational-threshold-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="operational-threshold-analysis">Operational Threshold Analysis</h2>
+<p>A predictive model only creates value if its outputs can be operationalized. The table below shows the sensitivity/precision tradeoff at five probability thresholds for the XGBoost model, expressed in terms a care operations team would use — patients flagged per day and true readmissions caught per day — based on the held-out test set (n = 44,168 admissions, ~121 discharges/day).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/threshold_analysis.png" class="img-fluid figure-img"></p>
+<figcaption>Threshold analysis showing sensitivity, PPV, and daily alert volume at five operating points</figcaption>
+</figure>
+</div>
+<p>At a threshold of 0.20, the model catches approximately two-thirds of true readmissions while generating a manageable alert volume for care management follow-up. At 0.30, alert burden drops substantially with a modest reduction in sensitivity — the appropriate operating point depends on available care management capacity. This framing reflects a real operational decision: a hospital with two dedicated care managers post-discharge would need a very different threshold than one with a full transition care team.</p>
+<p><strong>Key insight:</strong> The value of this model is not its AUC in isolation, but its ability to prioritize the right patients for the right interventions at the time of discharge — before a preventable readmission occurs.</p>
 </section>
 <section id="limitations" class="level2">
 <h2 class="anchored" data-anchor-id="limitations">Limitations</h2>
