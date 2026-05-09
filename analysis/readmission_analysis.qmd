@@ -7,17 +7,41 @@ execute:
   echo: true
   warning: false
   message: false
+  cache: true
+---
+
+## Executive Summary
+
+Unplanned 30-day readmissions are among the most costly and measurable failures in post-acute care, costing the U.S. healthcare system an estimated $26 billion annually. Under the CMS Hospital Readmissions Reduction Program, hospitals face Medicare payment penalties of up to 3% for excess readmissions in priority conditions including heart failure, pneumonia, and COPD.
+
+This analysis applies multivariable logistic regression to 220,798 adult index admissions from the MIMIC-IV database to identify administrative and demographic predictors of 30-day readmission. Key findings:
+
+- **15.1% readmission rate** (33,342 of 220,798 admissions) — consistent with national benchmarks
+- **Mental/Behavioral disorders** (OR 3.26) and **Neoplasms** (OR 2.34) carried the highest adjusted readmission odds among diagnosis categories
+- **Each additional hospital day** increased readmission odds by 4% (OR 1.04), reflecting illness severity
+- **Emergency admissions** had the highest readmission risk by admission type (OR 1.49)
+- Model **AUC: 0.637** — addition of prior utilization (OR 1.73) and comorbidity
+features improved discrimination over a demographic-only baseline; clinical variables
+(labs, vitals) would improve further
+
+**Clinical implication:** At discharge, patients with psychiatric or oncologic diagnoses, extended lengths of stay, and emergency admission status represent the highest-priority group for care management follow-up and post-discharge outreach.
+
 ---
 
 ## Background
 
-Hospital readmissions within 30 days of discharge represent a significant burden on healthcare systems and are widely used as a quality indicator for inpatient care. Understanding which patient characteristics are associated with readmission risk can help clinical teams prioritize post-discharge follow-up and allocate resources more effectively. This analysis uses MIMIC-IV, a large publicly available electronic health record dataset from Beth Israel Deaconess Medical Center, to identify demographic and administrative predictors of 30-day readmission among adult inpatients.
+Hospital readmissions within 30 days of discharge represent a measurable and often preventable failure in the care continuum. They account for an estimated $26 billion in annual U.S. healthcare spending, and under the CMS Hospital Readmissions Reduction Program (HRRP) — active since 2012 — hospitals face Medicare payment reductions of up to 3% for excess readmissions in six priority conditions: heart failure, acute myocardial infarction, pneumonia, COPD, hip and knee replacement, and coronary artery bypass graft surgery.
+
+Beyond financial penalties, high readmission rates signal gaps in discharge planning, post-acute follow-up, and care transitions. Identifying which patients are at elevated risk at the time of discharge gives clinical teams an actionable window: a care management referral, a scheduled outpatient call at day 3, or a social work consult before the patient leaves the building can meaningfully reduce the probability of return.
+
+This analysis uses MIMIC-IV, a large de-identified EHR dataset from Beth Israel Deaconess Medical Center (2008–2022), to build and evaluate a 30-day readmission risk model using administrative and demographic variables. The goal is not only to achieve the best possible discrimination, but to identify which patient characteristics are most strongly associated with readmission — information a care operations team can act on today, with data already available in any EHR at discharge.
 
 ## Data and Cohort Definition
 
 MIMIC-IV contains de-identified health data for patients admitted to Beth Israel Deaconess Medical Center between 2008 and 2022. The analysis draws on three tables: `admissions`, `patients`, and `diagnoses_icd`. Index admissions were defined as each patient's first non-elective, non-newborn hospitalization where the patient survived to discharge and was at least 18 years of age. A readmission was defined as any return hospitalization to the same institution within 30 days of the index discharge date.
 
 ```{r setup, include=FALSE}
+#| cache: false
 library(rprojroot)
 library(DBI)
 library(duckdb)
@@ -93,7 +117,8 @@ cohort <- dbGetQuery(con, "
   )
   SELECT 
     i.*,
-    CASE WHEN r.subject_id IS NOT NULL THEN 1 ELSE 0 END AS readmitted_30d
+    CASE WHEN r.subject_id IS NOT NULL THEN 1 ELSE 0 END AS readmitted_30d,
+    r.readmit_time  -- add this line
   FROM index_admissions i
   LEFT JOIN readmissions r ON i.subject_id = r.subject_id
 ")
@@ -129,7 +154,7 @@ cohort <- cohort |>
 
 ## Methods
 
-Predictor variables included patient demographics (age, gender, race/ethnicity), socioeconomic indicators (insurance type, marital status), clinical context (admission type, primary diagnosis category, length of stay). Primary ICD codes were mapped to broad disease categories using ICD-10 chapter ranges. Admissions coded under ICD-9 or without a mappable primary diagnosis were retained and classified as "Other." Missing values in marital status (n = 10,001) and insurance (n = 6,909) were handled via complete case analysis within the regression model. A multivariable logistic regression model was fit to estimate adjusted odds ratios for 30-day readmission. Model discrimination was assessed using the area under the receiver operating characteristic curve (AUC). A Kaplan-Meier curve was used to visualize time to readmission among the readmitted cohort.
+Predictor variables included patient demographics (age, gender, race/ethnicity), socioeconomic indicators (insurance type, marital status), clinical context (admission type, primary diagnosis category, length of stay), prior utilization (number of admissions in the 6 months preceding the index admission), comorbidity burden (total ICD codes per admission), and a binary flag for high-risk Elixhauser conditions including CHF, COPD, chronic kidney disease, malignancy, and major psychiatric diagnoses. Primary ICD codes were mapped to broad disease categories using ICD-10 chapter ranges. Admissions coded under ICD-9 or without a mappable primary diagnosis were retained and classified as "Other." Missing values in marital status (n = 10,001) and insurance (n = 6,909) were handled via complete case analysis within the regression model. A multivariable logistic regression model was fit to estimate adjusted odds ratios for 30-day readmission. Model discrimination was assessed using the area under the receiver operating characteristic curve (AUC). A Kaplan-Meier curve was used to visualize time to readmission among the readmitted cohort.
 
 ```{r data_cleaning}
 cohort_clean <- cohort |>
@@ -161,6 +186,73 @@ cohort_clean <- cohort |>
   )
 ```
 
+```{r feature_engineering}
+#| cache: true
+
+# Prior utilization: admissions in 6 and 12 months before index admission
+prior_util <- dbGetQuery(con, "
+  WITH index_admits AS (
+    SELECT 
+      a.subject_id,
+      a.hadm_id,
+      a.admittime AS index_admittime
+    FROM admissions a
+    JOIN (
+      SELECT subject_id, MIN(admittime) AS first_admit
+      FROM admissions
+      WHERE admission_type NOT IN ('ELECTIVE', 'NEWBORN')
+      GROUP BY subject_id
+    ) first ON a.subject_id = first.subject_id 
+           AND a.admittime = first.first_admit
+  ),
+  prior_counts AS (
+    SELECT 
+      i.hadm_id,
+      COUNT(CASE WHEN a.admittime >= i.index_admittime - INTERVAL 6 MONTHS
+                  AND a.admittime < i.index_admittime THEN 1 END) AS prior_admits_6m,
+      COUNT(CASE WHEN a.admittime >= i.index_admittime - INTERVAL 12 MONTHS
+                  AND a.admittime < i.index_admittime THEN 1 END) AS prior_admits_12m
+    FROM index_admits i
+    LEFT JOIN admissions a ON i.subject_id = a.subject_id
+    GROUP BY i.hadm_id
+  )
+  SELECT * FROM prior_counts
+")
+
+# Comorbidity burden: total ICD codes per admission (already have diagnoses_icd loaded)
+comorbidity <- dbGetQuery(con, "
+  SELECT
+    hadm_id,
+    COUNT(*) AS n_icd_codes,
+    -- Binary flags for high-risk Elixhauser conditions
+    MAX(CASE WHEN icd_version = 10 AND (
+      icd_code LIKE 'I50%'                  -- CHF
+      OR icd_code LIKE 'J44%'              -- COPD
+      OR icd_code LIKE 'N18%'              -- Chronic kidney disease
+      OR icd_code LIKE 'C%'               -- Malignancy
+      OR icd_code LIKE 'E11%'             -- Type 2 diabetes
+      OR icd_code LIKE 'E10%'             -- Type 1 diabetes
+      OR icd_code LIKE 'F20%'             -- Schizophrenia
+      OR icd_code LIKE 'F31%'             -- Bipolar
+      OR icd_code LIKE 'F32%' OR icd_code LIKE 'F33%'  -- Depression
+    ) THEN 1 ELSE 0 END) AS high_risk_comorbidity
+  FROM diagnoses_icd
+  GROUP BY hadm_id
+")
+
+# Join both onto cohort_clean
+cohort_clean <- cohort_clean |>
+  left_join(prior_util, by = "hadm_id") |>
+  left_join(comorbidity, by = "hadm_id") |>
+  mutate(
+    prior_admits_6m  = replace_na(prior_admits_6m, 0),
+    prior_admits_12m = replace_na(prior_admits_12m, 0),
+    n_icd_codes      = replace_na(n_icd_codes, 0),
+    high_risk_comorbidity = factor(replace_na(high_risk_comorbidity, 0)),
+    any_prior_admit  = factor(ifelse(prior_admits_6m > 0, 1, 0))
+  )
+```
+
 ## Cohort Characteristics
 
 The final cohort included 220,798 index admissions, of which 33,342 (15.1%) resulted in a readmission within 30 days. Table 1 presents cohort characteristics stratified by readmission status. Readmitted patients were slightly older on average (56.4 vs 55.0 years), more likely to be covered by Medicare (41.3% vs 36.4%), and had substantially longer index stays (mean LOS 6.17 vs 4.11 days). Mental/Behavioral and Neoplasm diagnoses were notably overrepresented among readmitted patients relative to their overall cohort share.
@@ -185,28 +277,58 @@ print(table1, showAllLevels = FALSE, quote = FALSE, noSpaces = TRUE)
 
 ## Logistic Regression Results
 
-A multivariable logistic regression identified several significant predictors of 30-day readmission. Among disease categories, Mental/Behavioral disorders (OR 3.26, p < 0.001) and Neoplasms (OR 2.34, p < 0.001) carried the highest adjusted odds of readmission relative to circulatory conditions. Each additional day of length of stay was associated with a 4% increase in readmission odds (OR 1.04, p < 0.001). Patients with private insurance had lower readmission odds compared to Medicaid (OR 0.84, p < 0.001), while Medicare patients had modestly higher odds (OR 1.05, p < 0.05). Direct Emergency admissions were associated with the highest readmission odds among admission types (OR 1.49, p < 0.001).
+A multivariable logistic regression identified several significant predictors of 30-day
+readmission. Prior admissions in the 6 months before the index stay carried the highest
+adjusted odds of readmission (OR 1.73, p < 0.001), consistent with published literature
+identifying prior utilization as the strongest administrative predictor of return
+hospitalization. Among diagnosis categories, Mental/Behavioral disorders (OR 3.31,
+p < 0.001) and Neoplasms (OR 2.35, p < 0.001) carried the highest adjusted odds
+relative to circulatory conditions. Each additional day of length of stay increased
+readmission odds by 2% (OR 1.02, p < 0.001), and each additional ICD code on the
+admission record increased odds by 2% (OR 1.02, p < 0.001), reflecting cumulative
+comorbidity burden. Direct Emergency admissions had the highest readmission odds
+among admission types (OR 1.41, p < 0.001). Patients with private insurance had lower
+readmission odds compared to Medicaid (OR 0.86, p < 0.001).
 
 ```{r logistic_regression}
+#| cache: true
 model <- glm(
   readmitted_30d ~ gender + anchor_age + insurance + marital_status +
-    race + admission_type + disease_category + los,
+    race_collapsed + admission_type + disease_category + los +
+    prior_admits_6m + n_icd_codes + high_risk_comorbidity,
   data = cohort_clean,
   family = binomial(link = "logit")
 )
 
+pred_probs <- predict(model, type = "response")
+roc_obj <- roc(
+  response = model$model$readmitted_30d,
+  predictor = pred_probs,
+  levels = c("No", "Yes"),
+  direction = "<"
+)
+auc_val <- round(auc(roc_obj), 3)
+
 tbl_regression(
   model,
   exponentiate = TRUE,
+  conf.int = TRUE,
+  estimate_fun = purrr::partial(style_ratio, digits = 2),
+  include = c(
+    "gender", "anchor_age", "insurance", "admission_type",
+    "disease_category", "los", "prior_admits_6m",
+    "n_icd_codes", "high_risk_comorbidity"
+  ),
   label = list(
     gender ~ "Gender",
     anchor_age ~ "Age",
     insurance ~ "Insurance Type",
-    marital_status ~ "Marital Status",
-    race ~ "Race/Ethnicity",
     admission_type ~ "Admission Type",
     disease_category ~ "Disease Category",
-    los ~ "Length of Stay (days)"
+    los ~ "Length of Stay (days)",
+    prior_admits_6m ~ "Prior admissions (6 months)",
+    n_icd_codes ~ "Number of ICD codes",
+    high_risk_comorbidity ~ "High-risk comorbidity"
   )
 ) |>
   bold_p(t = 0.05) |>
@@ -216,20 +338,15 @@ tbl_regression(
 
 ## Model Performance
 
-The logistic regression model achieved an AUC of 0.632, indicating modest discriminative ability. This is consistent with models built exclusively on administrative and demographic variables, which lack the clinical granularity of laboratory results, vital signs, or comorbidity indices. The ROC curve is presented below.
+The logistic regression model achieved an AUC of `r auc_val`, indicating modest 
+discriminative ability. Adding prior utilization, comorbidity burden, and high-risk 
+condition flags improved discrimination relative to a demographic-only baseline. 
+The model remains limited by the absence of clinical variables such as laboratory 
+values and vital signs, which are expected to improve performance further. The ROC 
+curve is presented below.
 
 ```{r roc_curve}
-pred_probs <- predict(model, type = "response")
-
-roc_obj <- roc(
-  response = model$model$readmitted_30d,
-  predictor = pred_probs,
-  levels = c("No", "Yes"),
-  direction = "<"
-)
-
-auc_val <- round(auc(roc_obj), 3)
-
+#| cache: false
 plot(
   roc_obj,
   col = "#2C7BB6",
@@ -247,14 +364,24 @@ Among patients who were readmitted within 30 days, the Kaplan-Meier curve below 
 
 ```{r survival_curve}
 surv_data <- cohort_clean |>
+  left_join(
+    cohort |> select(hadm_id, readmit_time, dischtime),
+    by = "hadm_id"
+  ) |>
   mutate(
     readmitted_num = ifelse(readmitted_30d == "Yes", 1, 0),
-    time = ifelse(readmitted_num == 1, los, 30)
+    days_to_event = case_when(
+      readmitted_num == 1 ~ as.numeric(
+        difftime(readmit_time, dischtime, units = "days")
+      ),
+      TRUE ~ 30  # censored at 30 days for non-readmitted patients
+    ),
+    days_to_event = pmin(pmax(days_to_event, 0), 30)  # clamp to [0, 30]
   ) |>
-  filter(!is.na(los))
+  filter(!is.na(days_to_event))
 
 km_fit <- survfit(
-  Surv(time, readmitted_num) ~ 1,
+  Surv(days_to_event, readmitted_num) ~ 1,
   data = surv_data
 )
 
@@ -265,7 +392,8 @@ plot(
   main = "Kaplan-Meier Curve — Time to 30-Day Readmission",
   col = "#2C7BB6",
   lwd = 2,
-  conf.int = TRUE
+  conf.int = TRUE,
+  xlim = c(0, 30)
 )
 ```
 
@@ -275,4 +403,12 @@ This analysis has several limitations. First, the model relies exclusively on ad
 
 ## Conclusion
 
-This analysis demonstrates that demographic and administrative EHR variables are associated with 30-day readmission risk, with diagnosis category and length of stay emerging as the strongest predictors. Mental/Behavioral and Neoplasm diagnoses warrant particular attention in discharge planning and post-acute follow-up programs. Future work should incorporate clinical variables to improve model discrimination beyond the baseline AUC of 0.632 achieved here.
+This analysis demonstrates that administrative and utilization-based EHR variables are
+meaningfully associated with 30-day readmission risk. Prior utilization, diagnosis
+category, and comorbidity burden emerged as the strongest predictors, with
+Mental/Behavioral and Neoplasm diagnoses warranting particular attention in discharge
+planning and post-acute follow-up programs. The baseline model achieved an AUC of
+0.637 using only administrative features available at discharge in any EHR — a
+foundation that future work should extend by incorporating clinical variables such as
+laboratory values, vital signs, and validated comorbidity indices to further improve
+discrimination.
