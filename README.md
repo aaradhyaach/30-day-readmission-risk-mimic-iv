@@ -1,12 +1,6 @@
 ---
-title: "30-Day Hospital Readmission Risk Analysis"
-author: "Aaradhya Acharya"
-date: today
-format: html
-execute:
-  echo: true
-  warning: false
-  message: false
+Title: "30-Day Hospital Readmission Risk Analysis"
+
 ---
 
 ## Executive Summary
