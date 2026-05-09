@@ -3,3 +3,4 @@ mimic-iv/
 .Rhistory
 .DS_Store
 analysis/readmission_analysis_cache/
+.ipynb_checkpoints/
