@@ -18,10 +18,10 @@ This project builds and evaluates a 30-day readmission risk model using real-wor
 
 - **15.1% readmission rate** across 220,798 index admissions — consistent with published national benchmarks
 - **Mental/Behavioral disorders** carried the highest adjusted odds of readmission (OR 3.26), followed by **Neoplasms** (OR 2.34), relative to circulatory conditions
-- **Each additional hospital day** was associated with a 4% increase in readmission odds (OR 1.04), reflecting higher underlying illness severity
-- **Emergency admissions** had the highest readmission risk among admission types (OR 1.49)
-- **Medicare patients** had modestly elevated odds vs. Medicaid (OR 1.05); patients with private insurance had lower odds (OR 0.84)
-- Baseline logistic regression using administrative variables achieved **AUC 0.632** — consistent with published literature for models without clinical lab or vital sign data
+- **Prior admissions in the 6 months** before discharge carried the highest adjusted odds (OR 1.73), the strongest administrative predictor in the model
+- **Each additional hospital day** was associated with a 2% increase in readmission odds (OR 1.02)
+- **Emergency admissions** had the highest readmission risk among admission types (OR 1.41)
+- Logistic regression with prior utilization and comorbidity features achieved **AUC 0.637**
 
 ---
 
